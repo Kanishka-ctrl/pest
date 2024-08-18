@@ -9,8 +9,16 @@ import os
 # Define your classes
 classes = ['ants', 'bees', 'beetle', 'caterpillar', 'earthworms', 'earwig', 'grasshopper', 'moth', 'slug', 'snail', 'wasp', 'weevil']
 
-# Load model lazily
-def load_model_on_demand():
+# Custom layer to handle potential issues with DepthwiseConv2D
+class CustomDepthwiseConv2D(tf.keras.layers.DepthwiseConv2D):
+    def __init__(self, **kwargs):
+        kwargs.pop('groups', None)  # Remove 'groups' argument if present
+        super(CustomDepthwiseConv2D, self).__init__(**kwargs)
+
+# Function to load the model
+@st.cache(allow_output_mutation=True)
+def load_model_with_cache():
+    st.write("Loading model...")
     custom_objects = {'DepthwiseConv2D': CustomDepthwiseConv2D}
     try:
         model = load_model('pest_classifier_model.h5', custom_objects=custom_objects)
@@ -43,9 +51,10 @@ st.header("Upload an Image or a Video of a Pest")
 uploaded_file = st.file_uploader("Choose an image or a video...", type=["jpg", "jpeg", "png", "mp4", "mov", "avi"])
 
 if uploaded_file is not None:
-    model = load_model_on_demand()
+    model = load_model_with_cache()
     if model is not None:
         if uploaded_file.type.startswith('image'):
+            st.write("Processing image...")
             image = Image.open(uploaded_file)
             image_np = np.array(image)
             predicted_class, confidence = classify_image(image_np, model)
@@ -54,6 +63,7 @@ if uploaded_file is not None:
             st.write(f"Confidence: **{confidence:.2f}**")
 
         elif uploaded_file.type.startswith('video'):
+            st.write("Processing video...")
             video_path = f"temp_{uploaded_file.name}"
             with open(video_path, "wb") as f:
                 f.write(uploaded_file.read())
