@@ -6,7 +6,7 @@ import tensorflow as tf
 from PIL import Image
 
 # Load your pre-trained classification model
-model = load_model('pest_classication.h5')
+model = load_model('pest_classifier_model.h5')
 
 # Define your classes
 classes = ['ants', 'bees', 'beetle', 'caterpillar', 'earthworms', 'earwig', 'grasshopper', 'moth', 'slug', 'snail', 'wasp', 'weevil']
