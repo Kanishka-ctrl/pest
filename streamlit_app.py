@@ -1,74 +1,48 @@
 import streamlit as st
-import numpy as np
-import cv2
-from matplotlib import pyplot as plt
-from scipy import ndimage
+import tensorflow as tf
+from tensorflow.keras.models import load_model
+from tensorflow.keras.applications import EfficientNetV2B0  # Import the specific EfficientNetV2 model
 from PIL import Image
+import numpy as np
 
-def conversion(image):
-    gray_image = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
-    return gray_image
+# Load pre-trained model with weights from ImageNet or any specific dataset
+@st.cache(allow_output_mutation=True)
+def load_pretrained_model():
+    # Assuming you downloaded v2b0-21k.h5 to the same directory
+    model = load_model('v2b0-21k.h5')  # Replace with the actual path to your model
+    return model
 
-def gaussian(image):
-    blur = cv2.GaussianBlur(image, (5, 5), 0)
-    return blur
+# Preprocess the image for the specific model input
+def preprocess_image(image, model_input_size):
+    image = tf.convert_to_tensor(image, dtype=tf.float32)
+    image = tf.image.resize(image, model_input_size)
+    image = tf.keras.applications.efficientnet_v2.preprocess_input(image)  # Preprocessing specific to EfficientNetV2
+    image = np.expand_dims(image, axis=0)  # Add batch dimension
+    return image
 
-def averagefilter(image):
-    kernel = np.ones((5,5),np.float32)/25
-    dst = cv2.filter2D(image, -1, kernel)
-    return dst
+# Perform prediction using the model
+def predict_image(image, model):
+    processed_image = preprocess_image(image, (224, 224))  # Example size, adjust based on model
+    predictions = model.predict(processed_image)
+    return predictions
 
-def segmentation(image):
-    gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
-    ret, thresh = cv2.threshold(gray, 0, 255, cv2.THRESH_BINARY_INV + cv2.THRESH_OTSU)
-
-    kernel = np.ones((3,3),np.uint8)
-    opening = cv2.morphologyEx(thresh, cv2.MORPH_OPEN, kernel, iterations = 2)
-
-    sure_bg = cv2.dilate(opening, kernel, iterations=3)
-
-    labelarray, particle_count = ndimage.measurements.label(sure_bg)
-
-    return sure_bg, particle_count
-
-# Streamlit App
-st.title("Pest Detection using Image Processing")
+# Streamlit app interface
+st.title("Pest Classification using EfficientNetV2")
 
 uploaded_file = st.file_uploader("Upload an Image", type=["jpg", "jpeg", "png"])
 
 if uploaded_file is not None:
-    image = np.array(Image.open(uploaded_file))
+    image = Image.open(uploaded_file)
+    image_np = np.array(image)
 
-    st.subheader("Original Image")
-    st.image(image, channels="BGR", use_column_width=True)
+    st.image(image, caption="Uploaded Image", use_column_width=True)
 
-    # Conversion to Grayscale
-    if st.button('Convert to Grayscale'):
-        gray_image = conversion(image)
-        st.subheader("Grayscale Image")
-        st.image(gray_image, use_column_width=True)
+    model = load_pretrained_model()
+    predictions = predict_image(image_np, model)
 
-    # Gaussian Blur
-    if st.button('Apply Gaussian Blur'):
-        gray_image = conversion(image)
-        blur_image = gaussian(gray_image)
-        st.subheader("Blurred Image")
-        st.image(blur_image, use_column_width=True)
+    st.subheader("Predicted Class")
+    predicted_class = np.argmax(predictions, axis=1)
+    st.write(f"Class ID: {predicted_class[0]}")
 
-    # Apply Average Filter
-    if st.button('Apply Average Filter'):
-        gray_image = conversion(image)
-        blur_image = gaussian(gray_image)
-        averaged_image = averagefilter(blur_image)
-        st.subheader("Averaged Image")
-        st.image(averaged_image, use_column_width=True)
-
-    # Segmentation
-    if st.button('Segment and Count Pests'):
-        gray_image = conversion(image)
-        blur_image = gaussian(gray_image)
-        averaged_image = averagefilter(blur_image)
-        segmented_image, pest_count = segmentation(averaged_image)
-        st.subheader("Segmented Image")
-        st.image(segmented_image, use_column_width=True)
-        st.write(f"Number of pests detected: {pest_count}")
+    st.subheader("Prediction Confidence")
+    st.write(predictions)
