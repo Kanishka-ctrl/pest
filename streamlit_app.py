@@ -4,12 +4,23 @@ import numpy as np
 from tensorflow.keras.models import load_model
 import tensorflow as tf
 from PIL import Image
-
-# Load your pre-trained classification model
-model = load_model('pest_classifier_model.h5')
+import os
 
 # Define your classes
 classes = ['ants', 'bees', 'beetle', 'caterpillar', 'earthworms', 'earwig', 'grasshopper', 'moth', 'slug', 'snail', 'wasp', 'weevil']
+
+# Custom object map if your model uses any custom layers or functions
+custom_objects = {
+    # 'CustomLayer': CustomLayer,  # Uncomment and add custom layers or objects if needed
+    # 'custom_activation': custom_activation_function  # Example custom activation
+}
+
+# Load your pre-trained classification model
+try:
+    model = load_model('pest_classifier_model.h5', custom_objects=custom_objects)
+    st.success("Model loaded successfully!")
+except Exception as e:
+    st.error(f"Error loading model: {e}")
 
 # Function to preprocess the image for EfficientNetB0
 def preprocess_image(img):
