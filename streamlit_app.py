@@ -1,76 +1,74 @@
 import streamlit as st
-import cv2
 import numpy as np
-from tensorflow.keras.models import load_model
-import tensorflow as tf
+import cv2
+from matplotlib import pyplot as plt
+from scipy import ndimage
 from PIL import Image
-import os
 
-# Define your classes
-classes = ['ants', 'bees', 'beetle', 'caterpillar', 'earthworms', 'earwig', 'grasshopper', 'moth', 'slug', 'snail', 'wasp', 'weevil']
+def conversion(image):
+    gray_image = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
+    return gray_image
 
-# Custom layer to handle potential issues with DepthwiseConv2D
-class CustomDepthwiseConv2D(tf.keras.layers.DepthwiseConv2D):
-    def __init__(self, **kwargs):
-        kwargs.pop('groups', None)  # Remove 'groups' argument if present
-        super(CustomDepthwiseConv2D, self).__init__(**kwargs)
+def gaussian(image):
+    blur = cv2.GaussianBlur(image, (5, 5), 0)
+    return blur
 
-# Function to load the model
-@st.cache(allow_output_mutation=True)
-def load_model_with_cache():
-    st.write("Loading model...")
-    custom_objects = {'DepthwiseConv2D': CustomDepthwiseConv2D}
-    try:
-        model = load_model('pest_classifier_model.h5', custom_objects=custom_objects)
-        st.success("Model loaded successfully!")
-        return model
-    except Exception as e:
-        st.error(f"Error loading model: {e}")
-        return None
+def averagefilter(image):
+    kernel = np.ones((5,5),np.float32)/25
+    dst = cv2.filter2D(image, -1, kernel)
+    return dst
 
-# Function to preprocess the image
-def preprocess_image(img):
-    img = tf.convert_to_tensor(img, dtype=tf.float32)
-    img = tf.image.resize(img, [224, 224])
-    img = np.expand_dims(img, axis=0)
-    return img
+def segmentation(image):
+    gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
+    ret, thresh = cv2.threshold(gray, 0, 255, cv2.THRESH_BINARY_INV + cv2.THRESH_OTSU)
 
-# Function to perform classification
-def classify_image(image, model):
-    processed_image = preprocess_image(image)
-    predictions = model.predict(processed_image)
-    predicted_class_index = np.argmax(predictions[0])
-    predicted_class = classes[predicted_class_index]
-    confidence = predictions[0][predicted_class_index]
-    return predicted_class, confidence
+    kernel = np.ones((3,3),np.uint8)
+    opening = cv2.morphologyEx(thresh, cv2.MORPH_OPEN, kernel, iterations = 2)
+
+    sure_bg = cv2.dilate(opening, kernel, iterations=3)
+
+    labelarray, particle_count = ndimage.measurements.label(sure_bg)
+
+    return sure_bg, particle_count
 
 # Streamlit App
-st.title("Pest Classification and Recommendation")
+st.title("Pest Detection using Image Processing")
 
-st.header("Upload an Image or a Video of a Pest")
-uploaded_file = st.file_uploader("Choose an image or a video...", type=["jpg", "jpeg", "png", "mp4", "mov", "avi"])
+uploaded_file = st.file_uploader("Upload an Image", type=["jpg", "jpeg", "png"])
 
 if uploaded_file is not None:
-    model = load_model_with_cache()
-    if model is not None:
-        if uploaded_file.type.startswith('image'):
-            st.write("Processing image...")
-            image = Image.open(uploaded_file)
-            image_np = np.array(image)
-            predicted_class, confidence = classify_image(image_np, model)
-            st.image(image, caption='Uploaded Image', use_column_width=True)
-            st.write(f"Predicted Class: **{predicted_class}**")
-            st.write(f"Confidence: **{confidence:.2f}**")
+    image = np.array(Image.open(uploaded_file))
 
-        elif uploaded_file.type.startswith('video'):
-            st.write("Processing video...")
-            video_path = f"temp_{uploaded_file.name}"
-            with open(video_path, "wb") as f:
-                f.write(uploaded_file.read())
-            st.video(video_path)
-            st.write("Video classification is currently not supported.")
-            os.remove(video_path)
+    st.subheader("Original Image")
+    st.image(image, channels="BGR", use_column_width=True)
 
-# Optionally: Add a recommendation for pesticides (static for now)
-st.write("### Recommended Pesticide")
-st.write("For more details on suitable pesticides, consult your local agricultural extension service or pest control expert.")
+    # Conversion to Grayscale
+    if st.button('Convert to Grayscale'):
+        gray_image = conversion(image)
+        st.subheader("Grayscale Image")
+        st.image(gray_image, use_column_width=True)
+
+    # Gaussian Blur
+    if st.button('Apply Gaussian Blur'):
+        gray_image = conversion(image)
+        blur_image = gaussian(gray_image)
+        st.subheader("Blurred Image")
+        st.image(blur_image, use_column_width=True)
+
+    # Apply Average Filter
+    if st.button('Apply Average Filter'):
+        gray_image = conversion(image)
+        blur_image = gaussian(gray_image)
+        averaged_image = averagefilter(blur_image)
+        st.subheader("Averaged Image")
+        st.image(averaged_image, use_column_width=True)
+
+    # Segmentation
+    if st.button('Segment and Count Pests'):
+        gray_image = conversion(image)
+        blur_image = gaussian(gray_image)
+        averaged_image = averagefilter(blur_image)
+        segmented_image, pest_count = segmentation(averaged_image)
+        st.subheader("Segmented Image")
+        st.image(segmented_image, use_column_width=True)
+        st.write(f"Number of pests detected: {pest_count}")
